@@ -19,10 +19,17 @@
 */
 
 var wot = {
-	version: 20120621,
+	version: 20120823,
 	platform: "chrome",
 	debug: false,
 	default_component: 0,
+
+	// environment (browser, etc)
+	env: {
+		is_mailru: false,
+		is_yandex: false,
+		is_rambler: false
+	},
 
 	components: [
 		{ name: 0 },
@@ -75,6 +82,7 @@ var wot = {
 		base:		"http://www.mywot.com/",
 		scorecard:	"http://www.mywot.com/scorecard/",
 		settings:	"http://www.mywot.com/settings",
+		welcome:	"http://www.mywot.com/settings/welcome",
 		setcookies:	"http://www.mywot.com/setcookies.php",
 		update:		"http://www.mywot.com/update",
 
@@ -102,7 +110,38 @@ var wot = {
 		link:	4
 	},
 
+	badge_types: {
+		notice: {   // for system notifications
+			color: [240,0,0,255],
+			text: "1",
+			type: "notice"  // important to compare with current status type
+		},
+		message: { // for messages from another users
+			color: [160,160,160,255],
+			text: "",
+			type: "message"
+		}
+	},
+
 	expire_warned_after: 20000,  // number of milliseconds after which warned flag will be expired
+
+	// trusted extensions IDs
+	allowed_senders: {
+		"ihcnfeknmfflffeebijjfbhkmeehcihn": true,   // dev version
+		"bhmmomiinigofkjcapegjjndpbikblnp": true,   // WOT via WebStore
+		"goinjpofmboaejkhflohjoloaoebfopj": true,   // WOT (m2) distributed via mywot.com
+		"hghiafbmcdglhlkgpfafjjoigpghhilc": true    // Manifest-1 version of WOT addon
+	},
+
+	// engagement schedule
+
+	engage_settings: {
+		invite_to_rw: {
+			delay: 12 * 3600,    // 12 hours after first launch
+			pref_name: "ratingwindow_shown",
+			enabled: true   // this is a cache value to avoid comprehensive logic work often (in case of = false)
+		}
+	},
 
 	/* logging */
 
@@ -234,6 +273,10 @@ var wot = {
 		}
 	},
 
+	is_allowed_sender: function(sender_id) {
+		return wot.allowed_senders[sender_id] || wot.debug; // allow known senders or any in
+	},
+
 	/* i18n */
 
 	i18n: function(category, id, shorter)
@@ -253,6 +296,22 @@ var wot = {
 		if (result == null) {
 			result = this.debug ? "!?" : "";
 		}
+
+		// Workaround for the Chrome's issue 53628
+		// http://code.google.com/p/chromium/issues/detail?id=53628
+		var temp_workaround = {
+			"warnings_warning": "Warning!",
+			"warnings_goto": "Go to the site",
+			"warnings_leave": "Leave the site",
+			"warnings_back": "Go back"
+		};
+
+		if (result == "") {
+			var res_2 = temp_workaround[msg];
+			if (res_2 != "") return res_2;
+		}
+
+		// END of workaround / remove it when the bug will be fixed
 
 		return result;
 	},
@@ -416,5 +475,33 @@ var wot = {
 		newurl += ( (url.indexOf("?") > 0) ? "&" : "?" );
 		newurl += "utm_source=addon&utm_content=" + context;
 		return newurl;
+	},
+
+	detect_environment: function(readonly)
+	{
+		var readonly = readonly || false;
+		// try to understand in which environment we are run
+		var user_agent = window.navigator.userAgent || "";
+		wot.env.is_mailru = user_agent.indexOf("MRCHROME") >= 0;
+
+		if(wot.env.is_mailru) {
+			// set param to label requests
+			wot.partner = "mailru";
+		}
+
+		if(!readonly) wot.prefs.set("partner", wot.partner);
+	},
+
+	time_sincefirstrun: function()
+	{
+		// gives time (in seconds) spent from very first run of the addon.
+		var starttime_str = wot.prefs.get("firstrun:time");
+		if (starttime_str) {
+			var starttime = new Date(starttime_str);
+			return (new Date() - starttime) / 1000;    // in seconds;
+
+		} else {
+			return undefined;
+		}
 	}
 };

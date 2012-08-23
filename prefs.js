@@ -1,6 +1,6 @@
 /*
 	prefs.js
-	Copyright © 2009-2011  WOT Services Oy <info@mywot.com>
+	Copyright © 2009 - 2012  WOT Services Oy <info@mywot.com>
 
 	This file is part of WOT.
 
@@ -55,7 +55,8 @@ $.extend(wot, { prefs: {
 		warning_unknown_0:		false,
 		warning_unknown_1:		false,
 		warning_unknown_2:		false,
-		warning_unknown_4:		false
+		warning_unknown_4:		false,
+		ratingwindow_shown:     0   // how many times RatingWindow was opened
 	},
 
 	set: function(name, value)
@@ -65,10 +66,30 @@ $.extend(wot, { prefs: {
 			wot.trigger("prefs:set", [ name, value ]);
 			return true;
 		} catch (e) {
-			console.log("prefs.set: failed with " + e + "\n");
+			console.log("prefs.set: failed with " + e);
 		}
 
 		return false;
+	},
+
+	/* Overrides preferences depending on the environment */
+	get_overrided_defaults: function(name)
+	{
+		var mailru_params = {
+			"warning_level_4": 39,
+			"warning_type_4": wot.warningtypes.overlay,
+			"show_application_2": false
+
+		};
+
+		if (wot.env.is_mailru) { // override only for MRU browser
+			if(mailru_params[name] !== undefined) {
+				return mailru_params[name];
+			}
+		}
+
+		return this.defaults[name];
+
 	},
 
 	get: function(name)
@@ -82,13 +103,13 @@ $.extend(wot, { prefs: {
 			}
 
 			if (value == null) {
-				value = this.defaults[name];
+				value = wot.prefs.get_overrided_defaults(name);
 			}
 
 			wot.trigger("prefs:get", [ name, value ]);
 			return value;
 		} catch (e) {
-			console.log("prefs.get: failed with " + e + "\n");
+			console.log("prefs.get: failed with " + e);
 		}
 
 		return null;
@@ -101,7 +122,7 @@ $.extend(wot, { prefs: {
 			wot.trigger("prefs:clear", [ name ]);
 			return true;
 		} catch (e) {
-			console.log("prefs.clear: failed with " + e + "\n");
+			console.log("prefs.clear: failed with " + e);
 		}
 
 		return false;

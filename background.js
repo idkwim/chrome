@@ -21,6 +21,7 @@
 $.extend(wot, { core: {
 	usermessage: {},
 	usercontent: [],
+	badge_status: null,
 
 	loadratings: function(hosts, onupdate)
 	{
@@ -49,14 +50,14 @@ $.extend(wot, { core: {
 				});
 			});
 		} catch (e) {
-			console.log("core.update: failed with " + e + "\n");
+			console.log("core.update: failed with " + e);
 		}
 	},
 
 	updatetab: function(id)
 	{
 		chrome.tabs.get(id, function(tab) {
-			wot.log("core.updatetab: " + id + " = " + tab.url + "\n");
+			wot.log("core.updatetab: " + id + " = " + tab.url);
 
 			if (wot.api.isregistered()) {
 				wot.core.loadratings(tab.url, function(hosts) {
@@ -66,6 +67,9 @@ $.extend(wot, { core: {
 						cached: wot.cache.get(hosts[0]) || { value: {} }
 					});
 				});
+
+				wot.core.engage_me();
+
 			} else {
 				wot.core.updatetabstate(tab, { status: "notready" });
 			}
@@ -162,7 +166,7 @@ $.extend(wot, { core: {
 			/* update content scripts */
 			this.updatetabwarning(tab, data);
 		} catch (e) {
-			console.log("core.updatetabstate: failed with " + e + "\n");
+			console.log("core.updatetabstate: failed with " + e);
 		}
 	},
 
@@ -227,7 +231,8 @@ $.extend(wot, { core: {
 	setusermessage: function(data)
 	{
 		try {
-			this.usermessage = {};
+
+			var usermessage = {};
 
 			var elems = data.getElementsByTagName("message");
 
@@ -249,18 +254,28 @@ $.extend(wot, { core: {
 						 	(obj.version == "eq" && wot.version == obj.than) ||
 							(obj.version == "le" && wot.version <= obj.than) ||
 							(obj.version == "ge" && wot.version >= obj.than))) {
-					this.usermessage = obj;
+					usermessage = obj;
 					break;
 				}
 			}
+
+			if(this.usermessage && this.usermessage.system_type) {
+				// don't change UserMessage if there is a system (addon's) one isn't shown yet. Keep it.
+				this.usermessage.previous = usermessage;
+			} else {
+				this.usermessage = usermessage;
+			}
+
+
 		} catch (e) {
-			console.log("core.setusermessage: failed with " + e + "\n");
+			console.log("core.setusermessage: failed with " + e);
 		}
 	},
 
 	unseenmessage: function()
 	{
-		return (this.usermessage.text &&
+		return (this.usermessage &&
+					this.usermessage.text &&
 					this.usermessage.id &&
 					this.usermessage.id != wot.prefs.get("last_message") &&
 					this.usermessage.id != "downtime");
@@ -290,6 +305,55 @@ $.extend(wot, { core: {
 			}
 		} catch (e) {
 			console.log("core.setusercontent: failed with " + e + "\n");
+		}
+	},
+
+	engage_me: function()
+	{   // this is general entry point to "communication with user" activity. Function is called on every tab switch
+
+		var engage_settings = wot.engage_settings,
+			core = wot.core;
+
+		// Advertise Rating feature
+		if(engage_settings.invite_to_rw.enabled) {
+
+			// check if Rating Window was never opened
+			var rw_shown = wot.prefs.get(engage_settings.invite_to_rw.pref_name);
+
+			var lang = wot.i18n("locale");
+
+			// Only for: Mail.ru & RW was never shown & lang is EN or RU
+			if(rw_shown < 1 && wot.env.is_mailru && (lang == "ru" || lang == "en")) {
+
+				// if time since firstrun more than predefined delay
+				var timesince = wot.time_sincefirstrun();
+				if(timesince >= engage_settings.invite_to_rw.delay) {
+
+					var previous_message = core.usermessage;
+
+					// set new message
+					wot.core.usermessage = {
+						text: wot.i18n("ratingwindow", "invite_rw"),
+						id: "invite_rw",
+						type: "important",
+						url: "",
+						target: "",
+						version: "",
+						than: "",
+						previous: previous_message,
+						system_type: "engage_rw"
+					};
+
+					// put a badge on the add-on's button
+					if(!core.badge_status) {
+						core.set_badge(wot.badge_types.notice);
+					}
+
+				}
+			} else {
+				//remember the fact to runtime variable to avoid checking that conditions every time
+				wot.engage_settings.invite_to_rw.enabled = false;
+			}
 		}
 	},
 
@@ -388,12 +452,80 @@ $.extend(wot, { core: {
 		});
 	},
 
+	set_badge: function(type, text)
+	{   /* sets the badge on the BrowserAction icon. If no params are provided, set the "notice" type */
+		var type = type || false,
+			text = text || "", color = "";
+
+		if(type !== false) {
+			type = type || wot.badge_types.notice;
+			text = text || type.text;
+			color = type.color || "#ffffff";
+			chrome.browserAction.setBadgeBackgroundColor({ color: color });
+			wot.core.badge_status = type;   // remember badge's status to prevent concurrent badges
+		} else {
+			wot.core.badge_status = null;
+		}
+
+		chrome.browserAction.setBadgeText({ text: text });
+	},
+
+	show_updatepage: function()
+	{
+		// show update page only if constant wot.firstrunupdate was increased
+		var update = wot.prefs.get("firstrun:update") || 0;
+
+		if (update < wot.firstrunupdate) {
+			wot.prefs.set("firstrun:update", wot.firstrunupdate);
+
+			chrome.tabs.create({
+				url: wot.urls.update + "/" + wot.i18n("lang") + "/" +
+					wot.platform + "/" + wot.version
+			});
+		}
+	},
+
+	welcome_user: function()
+	{
+		// this function runs only once per add-on's launch
+
+		// check if add-on runs not for a first time
+		if (!wot.prefs.get("firstrun:welcome")) {
+			wot.prefs.set("firstrun:update", wot.firstrunupdate);
+			wot.prefs.set("firstrun:time", new Date()); // remember first time when addon was run
+
+			// now we have only mail.ru case which requires to postpone opening welcome page
+			var postpone_welcome = wot.env.is_mailru;
+
+			if(!postpone_welcome) {
+				/* use the welcome page to set the cookies on the first run */
+				chrome.tabs.create({ url: wot.urls.welcome });
+				wot.prefs.set("firstrun:welcome", true);
+			} else {
+				wot.core.set_badge(wot.badge_types.notice); // set icon's badge to "notice"
+			}
+
+		} else {
+			wot.core.show_updatepage();
+			wot.api.setcookies();
+
+			var time_sincefirstrun = wot.time_sincefirstrun();
+
+			// if we didn't save firsttime before we should do it now
+			if (!time_sincefirstrun) {
+				wot.prefs.set("firstrun:time", new Date());
+			}
+		}
+
+	},
+
 	onload: function()
 	{
 		try {
 			/* load the manifest for reference */
 
 			this.loadmanifest();
+			wot.detect_environment();
 
 			/* messages */
 
@@ -420,6 +552,11 @@ $.extend(wot, { core: {
 				});
 			});
 
+			wot.bind("message:tab:close", function(port, data) {
+				// close the tab that sent this message
+				chrome.tabs.remove(port.port.sender.tab.id);
+			});
+
 			wot.bind("message:search:openscorecard", function(port, data) {
 				wot.core.open_scorecard(data.target, data.ctx);
 			});
@@ -430,7 +567,7 @@ $.extend(wot, { core: {
 				});
 			});
 
-			wot.listen([ "search", "my" ]);
+			wot.listen([ "search", "my", "tab" ]);
 
 			/* event handlers */
 
@@ -449,12 +586,12 @@ $.extend(wot, { core: {
 
 				wot.bind("cache:set", function(name, value) {
 					console.log("cache.set: " + name + " = " +
-						JSON.stringify(value) + "\n");
+						JSON.stringify(value));
 				});
 
 				wot.bind("prefs:set", function(name, value) {
 					console.log("prefs.set: " + name + " = " +
-						JSON.stringify(value) + "\n");
+						JSON.stringify(value));
 				});
 			}
 
@@ -464,7 +601,7 @@ $.extend(wot, { core: {
 				wot.core.update();
 
 				if (wot.api.isregistered()) {
-					wot.api.setcookies();
+					wot.core.welcome_user();
 					wot.api.update();
 					wot.api.processpending();
 				}
@@ -472,7 +609,7 @@ $.extend(wot, { core: {
 
 			wot.cache.purge();
 		} catch (e) {
-			console.log("core.onload: failed with " + e + "\n");
+			console.log("core.onload: failed with " + e);
 		}
 	}
 }});

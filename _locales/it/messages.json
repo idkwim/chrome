@@ -5,6 +5,9 @@
 	"lang": {
 		"message": "it-IT"
 	},
+	"ext_description": {
+		"message": "WOT mostra quali siti Web possono essere considerati attendibili in base all'esperienza di milioni di utenti in tutto il mondo."
+	},
 	"components_0": {
 		"message": "Attendibilità"
 	},
@@ -75,10 +78,10 @@
 		"message": "Valutazione personale"
 	},
 	"ratingwindow_viewscorecard": {
-		"message": "Visualizza dettagli scheda di valutazione."
+		"message": "Visualizza dettagli scheda di valutazione"
 	},
 	"ratingwindow_addcomment": {
-		"message": "Aggiungi un commento."
+		"message": "Aggiungi un commento"
 	},
 	"ratingwindow_inpartnership": {
 		"message": "In collaborazione con"
@@ -96,7 +99,7 @@
 		"message": "Visualizza dettagli valutazione e commenti"
 	},
 	"warnings_ratesite": {
-		"message": "Questo sito è sicuro - Do valutazione"
+		"message": "Questo sito è sicuro - <a>Do valutazione</a>"
 	},
 	"warnings_gotosite": {
 		"message": "Ignora avviso e vai al sito"
@@ -109,6 +112,18 @@
 	},
 	"warnings_unknown": {
 		"message": "Questo sito ha una valutazione sconosciuta"
+	},
+	"warnings_warning": {
+		"message": "Avviso!"
+	},
+	"warnings_goto": {
+		"message": "Vai al sito"
+	},
+	"warnings_leave": {
+		"message": "Lascia il sito"
+	},
+	"warnings_back": {
+		"message": "Torna indietro"
 	},
 	"contextmenu_open_scorecard": {
 		"message": "Open WOT scorecard"

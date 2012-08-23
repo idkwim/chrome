@@ -1,6 +1,6 @@
 /*
 	ratingwindow.js
-	Copyright © 2009, 2010  WOT Services Oy <info@mywot.com>
+	Copyright © 2009 - 2012  WOT Services Oy <info@mywot.com>
 
 	This file is part of WOT.
 
@@ -29,7 +29,7 @@ $.extend(wot, { ratingwindow: {
 	{
 		/* initialize on target change */
 		if (this.state.target != target) {
-			this.finishstate();
+			this.finishstate(false);
 			this.state = { target: target, down: -1 };
 		}
 
@@ -60,23 +60,30 @@ $.extend(wot, { ratingwindow: {
 		}
 	},
 
-	finishstate: function()
+	finishstate: function(unload)
 	{
 		try {
 			var bg = chrome.extension.getBackgroundPage();
+			var bgwot = bg.wot; // shortage for perfomance and readability
 
 			/* message was shown */
-			if (bg.wot.core.unseenmessage()) {
-				bg.wot.prefs.set("last_message", bg.wot.core.usermessage.id);
+
+			// on unload finishing, restore previous message or remove current
+			if(unload && bgwot.core.usermessage && bgwot.core.usermessage.previous) {
+				bgwot.core.usermessage = bgwot.core.usermessage.previous;
+			}
+
+			if (bgwot.core.unseenmessage()) {
+				bgwot.prefs.set("last_message", bg.wot.core.usermessage.id);
 			}
 
 			/* check for rating changes */
-			if (bg.wot.cache.cacheratingstate(this.state.target,
+			if (bgwot.cache.cacheratingstate(this.state.target,
 							this.state)) {
 
 				// don't show warning screen immediately after rating and set "expire to" flag
 				var warned_expire = (new Date()).getTime() + wot.expire_warned_after;
-				bg.wot.cache.setflags(this.state.target, {warned: true, warned_expire: warned_expire });
+				bgwot.cache.setflags(this.state.target, {warned: true, warned_expire: warned_expire });
 
 				/* submit new ratings */
 				var params = {};
@@ -88,12 +95,12 @@ $.extend(wot, { ratingwindow: {
 					}
 				});
 
-				bg.wot.api.submit(this.state.target, params);
+				bgwot.api.submit(this.state.target, params);
 
 			}
 
 			/* update all views */
-			bg.wot.core.update();
+			bgwot.core.update();
 		} catch (e) {
 			console.log("ratingwindow.finishstate: failed with " + e);
 		}
@@ -280,12 +287,20 @@ $.extend(wot, { ratingwindow: {
 		this.updateratings();
 
 		/* message */
-		if (bg.wot.core.usermessage.text) {
+
+		var msg = bg.wot.core.usermessage; // usual case: show a message from WOT server
+
+		// if we have something to tell a user
+		if (msg.text) {
+			var status = msg.type || "";
 			$("#wot-message-text")
-				.attr("url", bg.wot.core.usermessage.url || "")
-				.attr("status", bg.wot.core.usermessage.type || "")
-				.text(bg.wot.core.usermessage.text);
-			$("#wot-message").show();
+				.attr("url", msg.url || "")
+				.attr("status", status)
+				.text(msg.text);
+
+			$("#wot-message")
+				.attr("status", status)
+				.show();
 		} else {
 			$("#wot-message").hide();
 		}
@@ -333,7 +348,7 @@ $.extend(wot, { ratingwindow: {
 						wot.ratingwindow.updatecontents();
 					}
 				} catch (e) {
-					console.log("ratingwindow.update: failed with " + e + "\n");
+					console.log("ratingwindow.update: failed with " + e);
 				}
 			});
 		});
@@ -347,6 +362,20 @@ $.extend(wot, { ratingwindow: {
 	onload: function()
 	{
 		var bg = chrome.extension.getBackgroundPage();
+		var first_opening = false;
+
+		// show welcome page if we haven't done it before (embedded add-on case)
+		if(!bg.wot.prefs.get("firstrun:welcome") && bg.wot.env.is_mailru) {
+			first_opening = true;
+			chrome.tabs.create({ url: wot.urls.welcome }, function(tab) {
+
+				// workaround for https://github.com/mywot/chrome/issues/38 (hide rating window in Chrome 17)
+				chrome.tabs.update(tab.id, { selected: true });
+
+				bg.wot.prefs.set("firstrun:welcome", true);
+				bg.wot.core.set_badge(false); // reset badge
+			});
+		}
 
 		/* accessibility */
 		$("#wot-header-logo, " +
@@ -492,10 +521,22 @@ $.extend(wot, { ratingwindow: {
 
 		$(window).unload(function() {
 			/* submit ratings and update views */
-			wot.ratingwindow.finishstate();
+			wot.ratingwindow.finishstate(true);
 		});
 
 		bg.wot.core.update();
+
+		if(!first_opening) {
+			// increment "RatingWindow shown" counter
+			var counter = bg.wot.prefs.get(wot.engage_settings.invite_to_rw.pref_name);
+			counter = counter + 1;
+			bg.wot.prefs.set(wot.engage_settings.invite_to_rw.pref_name, counter);
+
+			// shown RatingWindow means that we shown a message => remove notice badge from the button
+			if(bg.wot.core.badge_status && bg.wot.core.badge_status.type == wot.badge_types.notice.type) {
+				bg.wot.core.set_badge(false);   // hide badge
+			}
+		}
 	}
 }});
 
