@@ -25,7 +25,7 @@ $.extend(wot, { prefs: {
 		min_confidence_level:	wot.confidencelevels[2].min + 2,
 		my_cookies:				true,
 		popup_hide_delay:		1000,
-		popup_show_delay:		200,
+		popup_show_delay:		2000,
 		search_ignore_0:		false,
 		search_ignore_1:		false,
 		search_ignore_2:		false,
